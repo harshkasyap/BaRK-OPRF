@@ -12,7 +12,35 @@ using namespace std;
 using namespace bOPRF;
 #include <fstream>
 
-
+vector<block> loadDataSet(const string& filename, u64 size) {
+    ifstream file(filename);
+    vector<block> dataSet;
+    string line;
+    u64 i = 0;
+ 
+    if (!file.is_open()) {
+        cerr << "Failed to open " << filename << endl;
+        return dataSet;  // Return an empty dataset if file cannot be opened
+    }
+ 
+    dataSet.reserve(size);
+ 
+    while (getline(file, line) && i < size) {
+        try {
+            uint64_t num = stoull(line);  // Convert line to uint64_t
+            // Assuming 'block' can be initialized from uint64_t, use SSE to set value:
+            block temp = _mm_set_epi64x(0, num);  // Set the lower 64 bits
+            dataSet.push_back(temp);
+            ++i;
+        } catch (const invalid_argument& e) {
+            cerr << "Invalid number in file: " << line << " (Invalid argument)" << endl;
+        } catch (const out_of_range& e) {
+            cerr << "Number out of range in file: " << line << " (Out of range)" << endl;
+        }
+    }
+    file.close();
+    return dataSet;
+}
 
 void senderGetLatency(Channel& chl)
 {
@@ -143,33 +171,20 @@ void BopSender(string ipAddressPort)
 	//pingTest(*sendChls[0], true);
 
 
-		for (u64 pow : { 8, 12, 16, 20, 24})
+		for (u64 pow : { 8, 12, 16, 20 })
 	{
 		u64 senderSize = (1 << pow), psiSecParam = 40;
-		u64 recverSize = senderSize; //for psi of diffirent set size, you can set receiver'set size here 
+		u64 recverSize = 1; //for psi of diffirent set size, you can set receiver'set size here 
 
 			u64 offlineTimeTot(0);
 			u64 onlineTimeTot(0);
 
 			for (u64 j = 0; j < numTrial; ++j)
 			{
-				//u64 repeatCount = 4;
-				PRNG prngSame(_mm_set_epi32(4253465, 3434565, 234435, 23987045));
-				//	PRNG prngSame2(_mm_set_epi32(4253465, 3434565, 234435, 23987045));
-				PRNG prngDiff(_mm_set_epi32(43465, 32254, 2435, 2398045));
+				std::vector<block> sendSet = loadDataSet("/home2/harsh_1921cs01/hub/BaRK-OPRF/bOPRFmain/send_data.txt", senderSize);
+                
+                std::cout << sendSet.size() << " vs " << std::endl;
 
-				std::vector<block> sendSet(senderSize);
-
-				u64 rand = prngSame.get_u32() % std::min(senderSize, recverSize);
-
-				for (u64 i = 0; i < rand; ++i)
-				{
-					sendSet[i] = prngSame.get_block();
-				}
-				for (u64 i = rand; i < senderSize; ++i)
-				{
-					sendSet[i] = prngDiff.get_block();
-				}
 				//std::shuffle(sendSet.begin(), sendSet.end(), prngSame);
 				SSOtExtSender OTSender0;
 
@@ -234,10 +249,10 @@ void BopRecv(string ipAddressPort)
 	std::cout << "--------------------------\n";
 
 
-	for (u64 pow : { 8,12,16,20,24 })
+	for (u64 pow : { 8,12,16,20 })
 	{
 		u64 senderSize = (1 << pow), psiSecParam = 40;
-		u64 recverSize = senderSize; //for psi of diffirent set size, you can set receiver'set size here 
+		u64 recverSize = 1; //for psi of diffirent set size, you can set receiver'set size here 
 
 			u64 offlineTimeTot(0);
 			u64 onlineTimeTot(0);
@@ -246,20 +261,7 @@ void BopRecv(string ipAddressPort)
 
 			for (u64 j = 0; j < numTrial; ++j)
 			{
-				PRNG prngSame(_mm_set_epi32(4253465, 3434565, 234435, 23987045));
-				PRNG prngDiff(_mm_set_epi32(434653, 23, 11, 56));
-
-				std::vector<block> recvSet(recverSize);
-				u64 rand = prngSame.get_u32() % std::min(senderSize, recverSize);
-				for (u64 i = 0; i < rand; ++i)
-				{
-					recvSet[i] = prngSame.get_block();
-				}
-
-				for (u64 i = rand; i < recverSize; ++i)
-				{
-					recvSet[i] = prngDiff.get_block();
-				}
+				std::vector<block> recvSet = loadDataSet("/home2/harsh_1921cs01/hub/BaRK-OPRF/bOPRFmain/recv_data.txt", recverSize);
 
 				SSOtExtReceiver OTRecver0;
 				BopPsiReceiver recvPSIs;
@@ -284,16 +286,24 @@ void BopRecv(string ipAddressPort)
 				offlineTimeTot += offlineTime;
 				onlineTimeTot += online;
 
-				//std::cout << "sent " << recvChls[0]->getTotalDataSent() << std::endl;;
+				std::cout << "sent " << recvChls[0]->getTotalDataSent() << std::endl;;
 
-				//output
-				//std::cout << "#Output Intersection: " << recvPSIs.mIntersection.size() << std::endl;
-				//std::cout << "#Expected Intersection: " << rand << std::endl;
-				if (recvPSIs.mIntersection.size() != rand)
+				std::cout << "#Output Intersection: " << recvPSIs.mIntersection.size() << std::endl;
+                
+                // Matching indices.
+                /**
+                for (int ind = 0; ind < recvPSIs.mIntersection.size(); ind++) {
+                    cout << " " << recvPSIs.mIntersection[ind] << ",";
+                }
+                
+				std::cout << "#Expected Intersection: " << rand << std::endl;
+				/**
+                if (recvPSIs.mIntersection.size() != rand)
 				{
 					std::cout << "\nbad intersection,  expecting  " << rand << " but got " << recvPSIs.mIntersection.size() << std::endl;
 					//throw std::runtime_error(std::string("bad intersection, "));
 				}
+                **/
 
 				std::cout << recverSize << " vs " << senderSize << "\t\t\t\t" << offlineTime << "\t\t" << online << std::endl;
 
